@@ -9,9 +9,9 @@ from shutil import copyfile
 from tqdm import trange, tqdm
 
 
-INT = lambda x,f=1: [int(i*f) for i in x]
-Ren = lambda x: ' '.join(x[:-4].split()[::-1])+x[-4:]
-#######################################################
+INT = lambda x,f=1: tuple(int(i*f) for i in x)
+REN = lambda x: ' '.join(x[:-4].split()[::-1])+x[-4:]
+##########################################################################################
 def test_cam(id=0):
     cap = cv2.VideoCapture(id)
     while cap.isOpened():
@@ -21,7 +21,7 @@ def test_cam(id=0):
     cap.release(); cv2.destroyAllWindows()
 
 
-#######################################################
+##########################################################################################
 def format_json(src:str, dst=None, dt=4):
     if type(dst)!=str: dst = src[:-5]+'_.json'
     assert src.endswith('.json') and os.path.isfile(src)
@@ -29,15 +29,15 @@ def format_json(src:str, dst=None, dt=4):
     with open(dst,'w') as ff: json.dump(js,ff,indent=dt)
 
 
-#######################################################
-def binarization(src, th=100, ext='.png'):
+##########################################################################################
+def binarize(src, thd=100, ext='.png'):
     src = src+'/*'+ext if os.path.isdir(src) else src
     for i in glob(src):
         im = cv2.imread(i,0); cv2.imshow('im', im)
-        cv2.createTrackbar('x', 'im', th, 255, lambda x:0)
+        cv2.createTrackbar('x', 'im', thd, 255, lambda x:0)
         while True:
-            th = cv2.getTrackbarPos('x', 'im')
-            img = ((im>th)*255).astype('uint8')
+            thd = cv2.getTrackbarPos('x', 'im')
+            img = ((im>thd)*255).astype('uint8')
             cv2.imshow('im', img); k = cv2.waitKey(5)
             if k in (ord('s'), 27):
                 cv2.imwrite(i[:-4]+'_.png', img); break
@@ -45,9 +45,20 @@ def binarization(src, th=100, ext='.png'):
     cv2.destroyAllWindows()
 
 
+def brighten(src, s=1.2, b=0, dst=None):
+    im = cv2.imread(src) if type(src)==str else src
+    hsv = cv2.cvtColor(im, cv2.COLOR_BGR2HSV)
+    hsv[...,2] = (hsv[...,2]*s+b).clip(0,255).astype('uint8')
+    im = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+    if type(src)==str and type(dst)!=str:
+        dst = src[:-4]+f'_{s}'+src[-4:]
+    if type(dst)==str: cv2.imwrite(dst, im)
+    return im
+
+
 # cv2.ROTATE_90_COUNTERCLOCKWISE=2=rot-1
 # cv2.ROTATE_90_CLOCKWISE=0, cv2.ROTATE_180=1
-#######################################################
+##########################################################################################
 def vid_process(vid, dst, gap=1, rot=0): # rot=(0,1,2,3)
     '''while True:
         rt, im = vid.read(); assert rt
@@ -91,7 +102,7 @@ def vid_rot(src='.', gap=1, rot=0): # rot=(0,1,2,3)
         vid.release(); dst.release()
 
 
-#######################################################
+##########################################################################################
 def joint_vid(src, dst, drt='horizon'):
     vid, F, N, H, W, R = [], [], [], [], [], []
     if os.path.isfile(dst+'.mp4'): os.remove(dst+'.mp4')
@@ -139,7 +150,7 @@ def joint_vid(src, dst, drt='horizon'):
     for v in vid: v.release()
 
 
-#######################################################
+##########################################################################################
 def blur_score(im, ksz=60): # estimate motion blur
     if type(im)==str and os.path.isfile(im):
         im = cv2.imread(im, 0) # gray
@@ -155,8 +166,7 @@ def blur_score(im, ksz=60): # estimate motion blur
         return cv2.Laplacian(im, cv2.CV_64F).var()
 
 
-#######################################################
-def blur_filter(src, dst=None, ths='D435i'):
+def blur_filter(src, dst=None, dev='D435I'):
     print(f'processing: {src}')
     if type(dst)!=str: dst = []
     else: os.makedirs(dst, exist_ok=True)
@@ -169,11 +179,11 @@ def blur_filter(src, dst=None, ths='D435i'):
             info = dict(color=i+'.jpg', blur=blur, date=date)
             if os.path.isfile(depth): info['depth'] = i+'.png'
             dst.append(info)
-        elif type(ths)!=str and var>ths: # ths=100
+        elif type(dev)!=str and var>dev: # dev=100
             copyfile(i, dst+'/'+os.path.basename(i))
         '''im = cv2.putText(im, '%.2f'%var, (2,30), 4, 1, (222,)*3)
         cv2.imshow('im', im); cv2.waitKey(1)'''
-    device = ths if type(ths)==str else None
+    device = dev if type(dev)==str else None
     dst = dict(device=device, images=dst)
     with open(f'{src}.json','w+') as ff:
         json.dump(dst, ff, indent=4); return dst
@@ -181,7 +191,7 @@ def blur_filter(src, dst=None, ths='D435i'):
 
 from threading import Thread
 from multiprocessing import Process, Pool, cpu_count
-#######################################################
+##########################################################################################
 def multi_process(func, src='.'):
     src = [i for i in os.listdir(src) if os.path.isdir(i)]
     for i in src:
@@ -197,10 +207,10 @@ def multi_process(func, src='.'):
     pool.close(); pool.join()#'''
 
 
-#######################################################
+##########################################################################################
 if __name__ == '__main__':
     #test_cam()
-    #binarization('hua.png')
+    #binarize('hua.png')
     #vid2img(gap=10)
     vid_rot(rot=0)
     # for 6: 0 1; 71; 1.4 432.5

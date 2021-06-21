@@ -9,16 +9,8 @@ from pathlib import Path
 from glob import glob
 
 
-#######################################################
-def progress_bar(percent, bar_length=50):
-    done = int(bar_length * percent)
-    done = '=' * done + '-' * (bar_length - done)
-    sys.stdout.write('[%s] %.2f%s\r' % (done, percent*100, '%'))
-    sys.stdout.flush()
-
-
 # sl.VIEW.SIDE_BY_SIDE = (sl.VIEW.LEFT, sl.VIEW.RIGHT)
-#######################################################
+##########################################################################################
 def svo2img(svo, dst=None, gap=1, mod=3):
     assert mod in (0,1,2,3); print("Process %s:"%svo)
     if mod==0: k,view = (1,),  (sl.VIEW.LEFT,)
@@ -87,7 +79,14 @@ def svo2img(svo, dst=None, gap=1, mod=3):
     zed.close()
 
 
-#######################################################
+def progress_bar(percent, bar_length=50):
+    done = int(bar_length * percent)
+    done = '=' * done + '-' * (bar_length - done)
+    sys.stdout.write('[%s] %.2f%s\r' % (done, percent*100, '%'))
+    sys.stdout.flush()
+
+
+##########################################################################################
 if __name__ == "__main__":
     dst = sys.argv[2] if len(sys.argv)>2 else None
     src = Path(sys.argv[1] if len(sys.argv)>1 else ".")
