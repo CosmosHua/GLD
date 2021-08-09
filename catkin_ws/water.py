@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import numpy as np
-import socket, json, math
+import socket, json
 
 
 ##########################################################################################
@@ -10,9 +10,9 @@ def Quart2Euler(qt):
     if type(qt) in (list,tuple): x,y,z,w = qt
     elif type(qt)==dict:
         x,y,z,w = qt['x'],qt['y'],qt['z'],qt['w']
-    yaw = math.atan2(2*(w*z+x*y), 1-2*(z*z+y*y))
-    roll = math.atan2(2*(w*x+y*z), 1-2*(x*x+y*y))
-    pitch = math.asin(2*(w*y-x*z))
+    yaw = np.arctan2(2*(w*z+x*y), 1-2*(z*z+y*y))
+    roll = np.arctan2(2*(w*x+y*z), 1-2*(x*x+y*y))
+    pitch = np.arcsin(2*(w*y-x*z))
     return yaw, roll, pitch # radian: [-pi,pi]
 
 

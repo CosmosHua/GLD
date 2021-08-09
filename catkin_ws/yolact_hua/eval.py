@@ -151,8 +151,9 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
         cfg.rescore_bbox = save
 
     with timer.env('Copy'):
-        idx = t[1].argsort(0, descending=True)[:args.top_k]
-        
+        #idx = t[1].argsort(0, descending=True)[:args.top_k]
+        idx = torch.argsort(t[1], 0, descending=True)[:args.top_k]
+
         if cfg.eval_mask_branch:
             # Masks are drawn on the GPU, so don't copy
             masks = t[3][idx]

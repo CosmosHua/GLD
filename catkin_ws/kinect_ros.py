@@ -4,8 +4,6 @@
 import numpy as np
 import scipy.linalg as la
 import os, sys, cv2, json
-#sys.path.append('yolov5')
-#from yolov5.infer import yolov5_det
 sys.path.append('openpose')
 from openpose import openpose
 from time import time

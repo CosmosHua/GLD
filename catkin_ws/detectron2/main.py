@@ -152,7 +152,7 @@ class ros_seg:
         #pos = Geo.Camera2World(TR, ptc.mean(axis=1))
         #pos = Geo.Camera2World(TR, ptc).mean(axis=1)
         pos = ptw.mean(axis=1); dp = depth[uv[1],uv[0]]
-        pos = Geo.uvRay2Plane(ct[0], TR, [*drt,*pos])
+        pos = Geo.uvRay2Plane(ct[0], [*drt,*pos], TR)
         pos = [cid[0],pos,drt]; #print('world:', pos)
 
         if mod==1: # update: append new objects
@@ -234,7 +234,7 @@ def get_TR(cpos):
     ps = np.asarray([ps.x, ps.y, ps.z])
     qa = cpos.pose.pose.orientation
     qa = np.asarray([qa.w, qa.x, qa.y, qa.z])
-    return Geo.Robot2World_TRMatrix(qa, ps)
+    return Geo.Quart2TR(qa, ps)
 
 
 # u: horizontal-right, v: vertical-down

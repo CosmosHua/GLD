@@ -3,40 +3,36 @@
 
 import cv2
 import numpy as np
-import scipy.linalg as la
 
 
-CK = [263.6988, 0, 344.7538, 0, 263.6988, 188.0399, 0, 0, 1]
-########################################################
-# 2D axes: origin lies top-left
-#   u-axis: horizontal->rightward
-#   v-axis: vertical->downward
-# 3D axes: origin lies top-left
-#   x-axis: horizontal->rightward
-#   y-axis: vertical->downward
-#   z-axis: horizontal->forward
-def Camera_2Dto3D(u, v, dp):
-    u,v = [np.asarray(i,int) for i in (u,v)]
-    dp = np.asarray(dp); shp = dp.shape
+CK = [263.6988, 0, 344.7538, 0, 263.6988, 188.0399, 0, 0, 1] # cam.K
+##########################################################################################
+# 2D: origin=top-left, u=rightward, v=downward
+# 3D: origin=center, x=rightward, y=downward, z=forward
+def Camera_2Dto3D(u, v, dp): # (3,N), units: mm
+    dp = np.asarray(dp); dim = len(dp.shape)
+    # filter nan/inf: (-inf, inf, nan)->0
+    dp = np.where(abs(dp)<np.inf, dp, 0)
+    u,v = [np.int32(u).ravel() for i in (u,v)]
+    z = dp[v,u] if dim>1 else dp # z=depth
     fx,_,cx,_,fy,cy = CK[:6] # cam intrinsics
-    z = dp[v,u] if len(shp)>1 else dp # meter
-    z = z * (1E-3 if z.dtype==np.uint16 else 1)
-    x = z * (u-cx)/fx; y = z * (v-cy)/fy
-    return np.asarray([x,y,z]) #(3,N)
+    pt = np.array([z*(u-cx)/fx, z*(v-cy)/fy, z])
+    pt = pt[:, np.where(z!=0)[0]] # filter z=0
+    return pt*(1 if z.dtype==np.uint16 else 1E3)
 
 
 def Camera_3Dto2D(pt):
+    x,y,z = np.asarray(pt)[:3] # (3,N)
     fx,_,cx,_,fy,cy = CK[:6] # cam intrinsics
-    assert type(pt)==np.ndarray; x,y,z = pt[:3] #(3,N)
     zz = np.where(z!=0, z, np.finfo(float).eps)
     u = (x*fx + z*cx)/zz; v = (y*fy + z*cy)/zz
-    return np.asarray([u,v]) #(2,N)
+    return np.asarray([u,v]) # (2,N)
 
 
-########################################################
+##########################################################################################
 # Camera extrinsics/extrinsic parameters
 # quat = np.asarray([w,x,y,z]), t = [x,y,z]
-def Robot2World_TRMatrix(quat, t=0):
+def Quart2TR(quat, t=0): # Robot2World_TRMatrix
     q = np.asarray(quat); n = np.dot(q,q) # Quaternion
     t, dim = ([0]*3,3) if type(t) in (int,float) else (t,4)
     if n<np.finfo(q.dtype).eps: return np.identity(dim)
@@ -64,41 +60,64 @@ def World2Camera(TR, pt, ofs=0.35): #(3,N)
     return np.asarray([-pt[1], ofs-pt[2], pt[0]])
 
 
-########################################################
+##########################################################################################
 def PCA(pt, rank=0):
-    dim, N = pt.shape #(3,N) -> normalized
+    dim, N = pt.shape # (3,N)->normalized
     pt = pt - pt.mean(axis=1, keepdims=True)
     cov = pt.dot(pt.T) / (N-1) # covariance matrix
     val, vec = np.linalg.eig(cov) # np.linalg.svd
     rank = dim if rank<1 else rank # dim>=max(rand)
     idx = val.argsort()[::-1][:rank] # descending
-    return val[idx], vec[:,idx].T #(rank,dim)
+    return val[idx], vec[:,idx].T # (rank,dim)
 
 
-def LeastSq(pt, y=0, T=True): #(3,N): ax+by+cz+d=0
-    if T: x = np.insert(pt.T, pt.shape[0], 1, axis=1)
-    else: x = np.insert(pt, pt.shape[1], 1, axis=1)
-    if type(y)!=np.ndarray:y = np.ones(x.shape[0],1)*y
-    sol, r, rank, s = la.lstsq(x, y) # x:(N,4)
-    return sol # (a,b,c,d), x.dot(sol)=>y
+# Best-fit linear plane, for the Eq: z = a*x + b*y + c.
+# Ref: https://gist.github.com/amroamroamro/1db8d69b4b65e8bc66a6
+def FitPlane(pt): # pt=(N,3)
+    pt = np.asarray(pt); x,y,z = pt.transpose()
+    A = np.c_[x, y, np.ones(len(pt))] # z=A.dot(P)
+    P, res, rank, s = np.linalg.lstsq(A, z)
+    a,b,c = P; n = np.linalg.norm([a,b,-1])
+    return np.array([a,b,-1,c])/n
 
 
-# uv: (2,N), u=uv[0], v=uv[1]
-# TR: camera extrinsic parameters
-# plane: ax+by+cz+d=0, n=(a,b,c), d=-n*x0
-def uvRay2Plane(uv, TR, plane):
-    P1 = Camera_2Dto3D(0,0, 0.0) # camera
-    P1 = Camera2World(TR, P1) # world, (3,)
-    P2 = Camera_2Dto3D(*uv, 1.0) # camera
-    P2 = Camera2World(TR, P2) # world, (3,)
-    #P1,P2 = [np.asarray(i) for i in (P1,P2)]
+# uv: (2,N); TR: camera extrinsics
+# plane: ax+by+cz+d=0, n=(a,b,c), d=-n*p0
+# Ref: https://www.cnblogs.com/qiu-hua/p/8001177.html
+def uvRay2Plane(uv, plane, TR=0):
+    # (p1,p2): arbitrary points, same uv & diff depth
+    p1, p2 = [Camera_2Dto3D(*uv,i) for i in (1,50)]
+    if type(TR)==np.ndarray: # camera->world (3,)
+        p1, p2 = [Camera2World(TR,i) for i in (p1,p2)]
     n, d = np.asarray(plane[:3]), plane[3:]
-    d = -n.dot(d[:3]) if len(d)>1 else d
-    k = -(n.dot(P1)+d)/n.dot(P2-P1) # ratio
-    return P1 + k*(P2-P1)
+    d = -n.dot(d[:3]) if len(d)>1 else d # if d=p0
+    k = -(n.dot(p1)+d)/n.dot(p2-p1) # slope ratio
+    return p1 + k*(p2-p1) # intersect point
 
 
-########################################################
+##########################################################################################
+def Quart2Euler(qt):
+    if type(qt) in (list,tuple): x,y,z,w = qt
+    elif type(qt)==dict:
+        x,y,z,w = qt['x'],qt['y'],qt['z'],qt['w']
+    yaw = np.arctan2(2*(w*z+x*y), 1-2*(z*z+y*y))
+    roll = np.arctan2(2*(w*x+y*z), 1-2*(x*x+y*y))
+    pitch = np.arcsin(2*(w*y-x*z))
+    return yaw, roll, pitch # radian: [-pi,pi]
+
+
+def Euler2Quart(yaw, roll, pitch):
+    euler = [yaw/2, roll/2, pitch/2]
+    siny, sinr, sinp = np.sin(euler)
+    cosy, cosr, cosp = np.cos(euler)
+    x = sinp*siny*cosr + cosp*cosy*sinr
+    y = sinp*cosy*cosr + cosp*siny*sinr
+    z = cosp*siny*cosr - sinp*cosy*sinr
+    w = cosp*cosy*cosr - sinp*siny*sinr
+    return x, y, z, w # euler: radian
+
+
+##########################################################################################
 if __name__ == '__main__':
     u = range(4); v = range(1,5); d = range(-1,3)
     pc = Camera_2Dto3D(u,v,d); print('cam3d:\n', pc)
@@ -107,7 +126,7 @@ if __name__ == '__main__':
 
     q = np.asarray([np.pi/4, 0, 0, np.pi/4]) # z-axis 90
     t = np.asarray([1,2,3]); pc = np.asarray([1,1,1])
-    T = Robot2World_TRMatrix(q,t); print('TR:\n', T)
+    T = Quart2TR(q,t); print('TR:\n', T)
 
     pt = Camera2World(T,pc); print('world:\n', pt)
     pc = World2Camera(T,pt); print('cam3d:\n', pc)

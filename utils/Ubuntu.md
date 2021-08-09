@@ -30,7 +30,7 @@
 >
 > eudic: https://www.eudic.net/v4/en/app/download
 >
-> sudo dpkg -i: chrome, vscode, nomachine, baidunetdisk, foxit reader
+> sudo dpkg -i: chrome, vscode, nomachine, baidunetdisk
 >
 > - sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys BA300B7755AFCFAE
 >   OR: wget -qO - https://typora.io/linux/public-key.asc | sudo apt-key add -
@@ -46,9 +46,11 @@
 >
 > sudo apt install stardict meld calibre xchm pavucontrol audacity kazam
 >
-> sudo apt install openssh-server sshfs unrar; sudo service ssh start;
+> sudo apt install openssh-server sshfs unrar; sudo service ssh start
 >
-> sudo apt install python3-argcomplete youtube-dl
+> sudo apt install python3-venv gnome-tweaks gnome-shell-extensions
+>
+> sudo apt install libfreeimage3 libfreeimage-dev # install FreeImage
 
 ---
 
@@ -63,7 +65,7 @@
 >
 > pip3 install torch==1.6.0 torchvision==0.7.0
 >
-> pip3 install cython open3d matplotlib pillow labelme
+> pip3 install cython open3d matplotlib pillow labelme filterpy
 >
 > pip3 install opencv-python torchsummary pycuda pycocotools
 >
@@ -76,12 +78,16 @@
 > sudo apt-get install python3-pyaudio
 >
 > pip install pyttsx3 playsound pydub
-> sudo apt install python3-espeak # espeak ffmpeg libespeak1
+> sudo apt install python3-espeak # ffmpeg espeak libespeak1
+>
+> sudo apt install tcl-dev tk-dev python3-tk # No module named 'tkinter'
+>
+> sudo apt install libopencv-core-dev libopencv-highgui-dev libopencv-calib3d-dev libopencv-features2d-dev libopencv-imgproc-dev libopencv-video-dev # install pre-compiled OpenCV libraries
 
 ---
 
+> pip3 install mediapipe
 > pip3 install facenet-pytorch
->
 > pip3 install mtcnn-pytorch # optional
 
 ---

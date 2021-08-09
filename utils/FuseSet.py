@@ -31,6 +31,7 @@ fields_to_fuse = ('images', 'annotations') #'categories'
 ReCat = {'tv': 'monitor'} # rename categories
 
 
+##########################################################################################
 if __name__ == '__main__':
     if len(sys.argv) < 4 or len(sys.argv) % 2 != 0:
         print(usage_text); exit()
@@ -100,7 +101,7 @@ if __name__ == '__main__':
     with open(out_JS+'.json','w+') as ff:
         json.dump(out, ff, indent=4)
     
-    ########################################
+########################################################
     IDC = {CATs[x]['id']:x for x in CATs}
     # YOLACT LABEL_MAP: =>continuous 1-index
     LMAP = {x:i+1 for i,x in enumerate(IDC)}

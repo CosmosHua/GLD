@@ -4,8 +4,7 @@
 import numpy as np
 import os, cv2, sys, json
 sys.path.append('yolov5')
-#from yolov5.infer import yolov5_det
-from yolov5.infer1 import yolov5_det
+from yolov5.infer import yolov5
 import time as tm
 
 import rospy, roslib
@@ -24,14 +23,12 @@ cam_color = {'RealSense':'/camera/color/image_raw/compressed', 'Kinect':'/rgb/im
     'ZED':'/zed_node/left/image_rect_color/compressed', 'USB':'/usb_cam/image_raw/compressed'}
 ##########################################################################################
 class ros_det:
-    def __init__(self, model, dst, cls=None, show=False):
+    def __init__(self, model, dst, cls=None):
         '''Initialize ros publisher, ros subscriber'''
-        rospy.init_node('ros_det', anonymous=True)
-        self.Det = yolov5_det(model, cls=cls)
-        self.Infer = lambda x: self.Det.infer(x, dst, show)[0]
-        self.Infer1 = lambda x: self.Det.infer1(x, True, True, show)
+        self.YOLO = yolov5(model, cls=cls); self.dst = dst
+        self.infer1 = lambda x: self.YOLO.infer1(x, True, True)
         self.results = {'520w':'', '523':'', '501':'', '502':'', '522':''}
-        self.dst = dst; self.show = []
+        rospy.init_node('ros_det', anonymous=True); self.show = []
 
         img_rgb = TPC(cam_color.values()); #img_depth = TPC(cam_depth.values())
         self.out_det = rospy.Publisher('/output/det/compressed', CompressedImage, queue_size=10)
@@ -56,9 +53,8 @@ class ros_det:
         rgb = cv2.imdecode(rgb, cv2.IMREAD_COLOR)
 
         ff = '%s/%s.jpg' % (self.dst, stat.data)
-        #cv2.imwrite(ff, rgb); res = self.Infer(ff)
-        im, res, t = self.Infer1(rgb); #cv2.imwrite(ff, im)
-        print('%s: %.2fms'%(ff,t), res) # for yolov5.infer1
+        im, _, dt, res = self.infer1(rgb)
+        print('%s: %.2fms'%(ff,dt), res)
         
         key = str(stat.data).split()[0]
         if len(res)>0: self.results[key] = 'in use'
@@ -123,7 +119,7 @@ def show_standby(im, dic, h0=37):
 if __name__ == '__main__':
     root = 'yolov5/'; dst = 'test'
     os.makedirs(dst, exist_ok=True)
-    det = ros_det(root+'yolov5x.pt', dst, [0,63])
+    det = ros_det(root+'yolov5l.pt', dst, [0,63])
     #try: rospy.spin() # 0=person, 63=laptop
     while not rospy.core.is_shutdown():
         im, dt = 0, 1

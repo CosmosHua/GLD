@@ -12,14 +12,13 @@ import os, cv2, sys
 sys.path.append('yolov5')
 
 from water import *
-from speech_baidu import *
+from baidu_speech import *
 from cam_rs import rs_stop_devices
 from cam_rs import rs_init, rs_rgbd
 from det_face import det_face, MTCNN
 from det_face import load_net, load_base
 from det_win import det_win, mark_win
-from yolov5.infer1 import yolov5_det
-#from yolov5.infer import yolov5_det
+from yolov5.infer import yolov5
 from threading import Thread, Event
 from geometry_msgs.msg import Point
 from std_msgs.msg import String
@@ -121,8 +120,8 @@ def get_rgb(cam, dev=0):
 Date = lambda: tm.strftime('%Y-%m-%d-%H:%M:%S', tm.localtime())
 ##########################################################################################
 def det_body(im, dst=None): # save
-    im, res, dt = YOLO.infer1(im, True, True, False)
-    print('\t%s: %.2fms'%(dst, dt), res) # for infer1
+    im, _, dt, res = YOLO.infer1(im, True, True)
+    print('\t%s: %.2fms'%(dst, dt), res) # infer1
     if type(dst)!=str: return im, res, dt # res=dict
 
     tc = (0,255,255) if len(res)>0 else (255,)*3
@@ -319,7 +318,7 @@ if __name__ == '__main__':
     Pub = rospy.Publisher('/arm/track/point', Point, queue_size=1)
 
     TCP = tcp_init(); Cam = init_cam((800,600)) # use MT
-    YOLO = yolov5_det('yolov5/yolov5x.pt', cls=[0])
+    YOLO = yolov5('yolov5/yolov5l.pt', cls=[0]) # person
     FACE, mtcnn = load_net('yolov5/vggface2.pt'), MTCNN()
     BASE = load_base('GLDFace', FACE, mtcnn); k = 0
     MARK = tcp_cmd(TCP,'markers/query_list')['results']

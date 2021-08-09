@@ -42,21 +42,20 @@ def hsv_contours(im, low, high, thd=625, thd_bi=10):
     # cv2.CHAIN_APPROX_TC89_L1和cv2.CHAIN_APPROX_TC89_KCOS：使用teh-Chinl chain 近似算法
     contours, heriachy = cv2.findContours(mask, cv2.RETR_EXTERNAL, method) # python3
     #_, contours, heriachy = cv2.findContours(mask, cv2.RETR_EXTERNAL, method) # python2
-    # contours = [cnt.squeeze() for cnt in contours if cv2.contourArea(cnt)>thd]
+    # contours = [c.squeeze() for c in contours if c.shape[0]>2 and cv2.contourArea(c)>thd]
+    # cv2.drawContours(im, contours, -1, (5,)*3, 2) # cv2.fillPoly(im, contours, (5,)*3)
 
-    masks, result = [], [] # filter by area
-    mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-    bg = np.zeros((*mask.shape[:2],3), mask.dtype)
-    for cnt in contours:
-        if cv2.contourArea(cnt)>thd: # area_threshold
-            #cv2.drawContours(bg.copy(), [cnt], 0, (5,)*3, -1)
-            m = cv2.fillPoly(bg.copy(), [cnt], (5,)*3)[...,0]>0
-            mk = bg[...,0].copy(); mk[m] = mask[...,0][m]
-            masks.append(mk>0) # instantiate mask: bool
+    masks, result = [], []
+    for cnt in contours: # filter by area
+        if cv2.contourArea(cnt)>thd: # keep
+            mk = np.zeros(mask.shape, mask.dtype)
+            mk = cv2.fillPoly(mk, [cnt], 255)
+            #cv2.drawContours(mk, [cnt], 0, 255, -1)
+            masks.append(np.all([mk,mask], axis=0)) # bool
             result.append(cnt.squeeze()) # squeeze
-        else: cv2.fillPoly(mask, [cnt], (0,0,0)) # erase
-        # cv2.drawContours(mask, [cnt], 0, (0,0,0), -1)
-    return result, masks, mask[...,0]
+        else: cv2.fillPoly(mask, [cnt], 0) # erase
+        # cv2.drawContours(mask, [cnt], 0, 0, -1)
+    return result, masks, mask
 
 
 def fit_contours(contours, mod='R', thd=625):
@@ -157,12 +156,11 @@ def test_fits(src, t=300):
             im = cv2.imread(i)
             im, res, mk = get_fits(im, HSV_Set, x)
             if t<1: print(f'{i}:\n{res}\n'); cv2.imshow('mk',mk)
-            cv2.imwrite(i[:-4]+f'_{x}'+'.png', im)
+            #cv2.imwrite(i[:-4]+f'_{x}'+'.png', im)
             cv2.imshow('hsv', im); cv2.waitKey(t)
         cv2.destroyAllWindows()
 
 
-import rospy; from cv_bridge import CvBridge; CVB = CvBridge()
 D2L = lambda x: [{k:v for k,v in zip(x.keys(),i)} for i in zip(*x.values())]
 L2D = lambda x: {k:v for k,*v in zip(x[0].keys(),*[i.values() for i in x])} if x else {}
 ##########################################################################################
@@ -177,34 +175,6 @@ def get_instances(im, cls, mod=[], s=1):
     return mask_instances(im,result), result # image
 
 
-def format_msg(src, Obj, s=2):
-    assert type(Obj)==type and 'msg' in str(Obj)
-    from sensor_msgs.msg import RegionOfInterest
-    from geometry_msgs.msg import Point32, Polygon
-
-    hd = hasattr(src,'header')
-    if type(src)==str: im = cv2.imread(src)
-    elif type(src)==np.ndarray: im = src.copy()
-    elif hd: im = CVB.compressed_imgmsg_to_cv2(src)
-
-    im, res = get_instances(im, HSV_Set, {}, s)
-    ob = Obj(header=src.header) if hd else Obj()
-    if not res: return ob, im, res
-
-    if hasattr(Obj,'class_ids'): ob.class_ids = res['cid']
-    if hasattr(Obj,'class_names'): ob.class_names = res['cls']
-    if hasattr(Obj,'scores'): ob.scores = [1.0]*len(res['cls'])
-    if hasattr(Obj,'boxes'): ob.boxes = [RegionOfInterest(x_offset=x,
-        y_offset=y, width=w, height=h) for (x,y,w,h) in res['box']]
-    if hasattr(Obj,'contours'): ob.contours = [Polygon([Point32(
-        x=x, y=y) for (x,y) in ct.transpose()]) for ct in res['cnt']]
-    elif hasattr(Obj,'masks'): # for masks
-        for mk in res['mask']: # get masks
-            m = CVB.cv2_to_imgmsg(mk.astype('uint8')*255, 'mono8')
-            m.header = ob.header; ob.masks.append(m)
-    return ob, im, res
-
-
 '''std_msgs/Header header # Obj header
 int32[] class_ids # Integer class IDs for each bounding box
 string[] class_names # String class IDs for each bouding box
@@ -214,7 +184,37 @@ sensor_msgs/RegionOfInterest[] boxes # Bounding boxes in pixels
 # https://docs.ros.org/en/api/geometry_msgs/html/msg/Polygon.html
 geometry_msgs/Polygon[] contours # Instance contours as Polygon
 # http://docs.ros.org/en/api/sensor_msgs/html/msg/Image.html
-#sensor_msgs/Image[] masks # Instance masks as Image'''
+#sensor_msgs/Image[] masks # Instance masks as Image#'''
+import rospy; from cv_bridge import CvBridge; CVB = CvBridge()
+##########################################################################################
+def format_msg(src, Obj, s=2):
+    assert type(Obj)==type and 'msg' in str(Obj)
+    from sensor_msgs.msg import RegionOfInterest
+    from geometry_msgs.msg import Point32, Polygon
+
+    hd = hasattr(src,'header')
+    if type(src)==str: im = cv2.imread(src)
+    elif type(src)==np.ndarray: im = src.copy()
+    elif hd: im = CVB.compressed_imgmsg_to_cv2(src)
+    obj = Obj(header=src.header) if hd else Obj()
+
+    im, res = get_instances(im, HSV_Set, {}, s)
+    if not res: return obj, im, res
+
+    if hasattr(Obj,'class_ids'): obj.class_ids = res['cid']
+    if hasattr(Obj,'class_names'): obj.class_names = res['cls']
+    if hasattr(Obj,'scores'): obj.scores = [1.0]*len(res['cls'])
+    if hasattr(Obj,'boxes'): obj.boxes = [RegionOfInterest(x_offset=x,
+        y_offset=y, width=w, height=h) for (x,y,w,h) in res['box']]
+    if hasattr(Obj,'contours'): obj.contours = [Polygon([Point32(
+        x=x, y=y) for (x,y) in c.transpose()]) for c in res['cnt']]
+    elif hasattr(Obj,'masks'): # for masks
+        for mk in res['mask']: # get masks
+            m = CVB.cv2_to_imgmsg(mk.astype('uint8')*255, 'mono8')
+            m.header = obj.header; obj.masks.append(m)
+    return obj, im, res
+
+
 ########################################################
 def publish_msg(Obj, out='/glodon', sub=''):
     #from glodon_msgs.msg import Object as Obj
@@ -230,12 +230,12 @@ def publish_msg(Obj, out='/glodon', sub=''):
 
     while cv2.waitKey(5)!=27:
         if not hasattr(src,'header'): continue
-        ob, im, *_ = format_msg(src,Obj); pub.publish(ob)
+        obj, im, *_ = format_msg(src,Obj); pub.publish(obj)
         pim.publish(CVB.cv2_to_compressed_imgmsg(im))
         cv2.imshow('hsv', im) #'''
     '''from glob import glob
     for i in sorted(glob(f'{src}/*.jpg')):
-        ob, im, *_ = format_msg(i,Obj); pub.publish(ob)
+        obj, im, *_ = format_msg(i,Obj); pub.publish(obj)
         pim.publish(CVB.cv2_to_compressed_imgmsg(im))
         cv2.imshow('hsv', im); cv2.waitKey() #'''
     cv2.destroyAllWindows()
@@ -243,9 +243,10 @@ def publish_msg(Obj, out='/glodon', sub=''):
 
 ##########################################################################################
 if __name__ == '__main__':
-    src = 'test'; #test_fits(src)
-    from glodon_msgs.msg import Object
+    os.chdir(os.path.dirname(__file__))
+    src = './test'; test_fits(src, 5000)
+    '''from glodon_msgs.msg import Object
     from mask_rcnn_ros.msg import Result
     #publish_msg(Result, '/mask_rcnn')
-    publish_msg(Object, '/glodon')
+    publish_msg(Object, '/glodon')#'''
 

@@ -1,24 +1,34 @@
 #!/usr/bin/python3
 # coding: utf-8
 
-import os, cv2, json
+
+import matplotlib, gi
+matplotlib.use('Agg') #'TkAgg'
+#gi.require_version('Gtk','2.0')
+
+import numpy as np
+import os, sys, cv2
 from pathlib import Path
 from random import randint
 from time import time
 
-import torch
-import torch.backends.cudnn as cudnn
+import torch, json, yaml
+from torch.backends import cudnn
+
+FILE = Path(__file__).absolute() # add path
+sys.path.append(FILE.parents[0].as_posix())
 
 from models.experimental import attempt_load
-from utils.datasets import LoadStreams, LoadImages
-from utils.general import check_img_size, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, plot_one_box, strip_optimizer, set_logging, increment_dir
-from utils.torch_utils import select_device, load_classifier, time_synchronized
+from utils.datasets import LoadStreams, LoadImages, letterbox
+from utils.general import non_max_suppression, scale_coords, xyxy2xywh
+from utils.torch_utils import select_device, load_classifier, time_sync
+from utils.plots import Annotator, colors
+#from utils.plots import plot_one_box
 
 
 ##########################################################################################
 @torch.no_grad()
-class yolov5_det(object):
+class yolov5(object):
     def __init__(self, wt, conf=0.25, iou=0.45, cls=None, size=640, augment=False, agnostic_nms=False):
         if type(wt)!=str or not os.path.isfile(wt):
             for wt in ['yolov5x.pt', 'yolov5l.pt', 'yolov5m.pt', 'yolov5s.pt']:
@@ -39,54 +49,74 @@ class yolov5_det(object):
         self.augment = augment; s = int(model.stride.max())
         self.imsz = int(size if size%s==0 else (size//s)*s)
 
+        cudnn.benchmark = True # speedup for constant img_size
         #img = torch.zeros((1, 3, self.imsz, self.imsz), device=self.device)
-        #model(img.half() if self.half else img # run once for test
+        #model(img.half() if self.half else img) # run once for test
 
 
-    def infer(self, src, dst=None, show='det', over=True):
+    def plot(self, im, det):
+        '''names = self.names; colors = self.colors
+        for *xyxy, conf, c in reversed(det): # (x1,y1,x2,y2,conf,cls)
+            c = int(c); label = f'{names[c]} {conf:.2f}' # Add bbox to image
+            plot_one_box(xyxy, im, label=label, color=colors[c], line_width=2)#'''
+
+        names = self.names; from utils.plots import colors
+        annotator = Annotator(im, line_width=2, example=str(names))
+        for *xyxy, conf, c in reversed(det): # (x1,y1,x2,y2,conf,cls)
+            c = int(c); label = f'{names[c]} {conf:.2f}' # Add bbox to image
+            annotator.box_label(xyxy, label, color=colors(c, True))
+        im[:] = annotator.result()#'''
+
+        return {names[int(c)]:int((det[:,-1]==c).sum()) for c in det[:,-1].unique()}
+
+
+    def infer1(self, im, prepare=True, post=True):
+        if type(im)==str: im = cv2.imread(im)
+        assert type(im)==np.ndarray
+        if prepare:
+            img = letterbox(im, new_shape=self.imsz)[0] # resize
+            img = img[...,::-1].transpose(2,0,1) # BGR->RGB->(C,H,W)
+            img = np.ascontiguousarray(img)
+        else: img = im
+
+        img = torch.from_numpy(img).to(self.device)
+        # convert uint8 to fp16/fp32, [0,255] to [0,1.0]
+        img = (img.half() if self.half else img.float())/255.0
+        if img.ndimension()==3: img = img.unsqueeze(0)
+
+        t0 = time_sync() # Inference
+        pred = self.model(img, augment=self.augment)[0]
+        # Apply NMS. pred=[N,(n,6)]: list of batch_size=N tensors (n,6)
+        pred = non_max_suppression(pred, self.conf_thres, self.iou_thres,
+                        classes=self.classes, agnostic=self.agnostic_nms)
+        dt = (time_sync()-t0)*1000
+        if post:
+            for det in pred: # Rescale boxes from img_shape to im_shape, det=(n,6)
+                det[:,:4] = scale_coords(img.shape[2:], det[:,:4], im.shape).round()
+            return im, pred, dt, self.plot(im, pred[0]) # det=pred[-1]
+        return im, pred, dt # det[i]=(x1,y1,x2,y2,conf,cls)
+
+
+    def infer(self, src, dst=None, show='det'):
         src = str(src); save = False
         if type(dst)==str:
-            os.makedirs(dst, exist_ok=True); dst = Path(dst); save = True
+            os.makedirs(dst, exist_ok=True)
+            dst = Path(dst); save = True
         webcam = src.isdigit() or src.startswith(('rtsp://','http://'))
 
         if webcam: # Set Dataloader
-            cudnn.benchmark = True # speedup for constant img_size
             data = LoadStreams(src, img_size=self.imsz)
         else: data = LoadImages(src, img_size=self.imsz)
 
-        # Run inference
-        RST = []; t0 = time()
         vid_path, vid_writer = None, None
-        names = self.names; colors = self.colors
         for path, img, imgs, vid_cap in data:
-            img = torch.from_numpy(img).to(self.device)
-            # convert uint8 to fp16/fp32, [0,255] to [0,1.0]
-            img = (img.half() if self.half else img.float())/255.0
-            if img.ndimension()==3: img = img.unsqueeze(0)
+            im, pred, dt = self.infer1(img, prepare=False, post=False)
 
-            # Inference
-            t1 = time_synchronized()
-            pred = self.model(img, augment=self.augment)[0]
-
-            # Apply NMS. pred: list of N tensor, N=batch_size
-            pred = non_max_suppression(pred, self.conf_thres, self.iou_thres,
-                            classes=self.classes, agnostic=self.agnostic_nms)
-            t2 = time_synchronized()
-
-            # Process detections per batch of images
-            for i, det in enumerate(pred): # webcam: batch_size>=1 for multi-stream
+            # Process detections per batch of images, img=Tensor(N,c,h,w)
+            for i, det in enumerate(pred): # webcam: N>=1 for multi-stream
                 p, im = (Path(path[i]+'.mp4'), imgs[i].copy()) if webcam else (Path(path), imgs)
-
-                res = {} # img.shape[2:],img.dtype
-                if det is not None and len(det):
-                    # Rescale boxes from img_shape to im_shape(original)
-                    det[:,:4] = scale_coords(img.shape[2:], det[:,:4], im.shape).round()
-                    for *xyxy, prob, c in reversed(det): # det[0]:(x1,y1,x2,y2,prob,cls)
-                        if save or show: # Add bbox to image
-                            c = int(c); label = '%s %.2f' % (names[c], prob)
-                            plot_one_box(xyxy, im, label=label, color=colors[c], line_thickness=2)
-                    res = {names[int(c)]:int((det[:,-1]==c).sum()) for c in det[:,-1].unique()}
-                RST.append(res); print('%.2fms:'%((t2-t1)*1000), res)
+                det[:,:4] = scale_coords(img.shape[2:], det[:,:4], im.shape).round()
+                print('%.2fms:'%dt, self.plot(im, det))
 
                 if show: # show results
                     cv2.imshow(str(show), im)
@@ -94,29 +124,34 @@ class yolov5_det(object):
 
                 if save: # save results
                     save_path = str(dst/p.name)
-                    if data.mode=='images' and not webcam:
-                        if not over and os.path.isfile(save_path):
+                    if data.mode=='images' or not webcam:
+                        if os.path.isfile(save_path):
                             save_path = save_path[:-4]+'_det.jpg'
                         cv2.imwrite(save_path, im)
-                    else:
-                        if vid_path != save_path: # init new video
-                            vid_path = save_path
+                    else: # video or stream
+                        if vid_path != save_path:
+                            vid_path = save_path # new video
                             if isinstance(vid_writer, cv2.VideoWriter):
                                 vid_writer.release() # release previous video writer
-                            fourcc = 'mp4v' # output video codec
-                            fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                            w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w,h))
+                            fourcc = cv2.VideoWriter_fourcc(*'mp4v') # video codec
+                            if vid_cap: # for video
+                                fps = vid_cap.get(cv2.CAP_PROP_FPS)
+                                w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                                h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            else: h, w = im.shape[:2]; fps = 30 # for stream
+                            vid_writer = cv2.VideoWriter(save_path, fourcc, fps, (w,h))
                         vid_writer.write(im)
-        return RST
 
 
 ##########################################################################################
 if __name__ == '__main__':
-    import sys; arg = sys.argv
-    src = arg[1] if len(arg)>1 else '../Test.mp4'
-    dst = arg[2] if len(arg)>2 else '../test'
-    det = yolov5_det('yolov5x.pt', cls=[0,63])
-    det.infer(src, dst) # 0=person, 63=laptop
+    os.chdir(os.path.dirname(__file__))
+    '''with open('yolov5/data/cooc.yaml') as f:
+        cls = yaml.safe_load(f)['names'] # det.names'''
+    det = yolov5('yolov5l.pt', cls=[0,63]) # 0=person
+    #det.infer(src=0) # batch_infer
+    cap = cv2.VideoCapture(-1)
+    while cv2.waitKey(5)!=27: # single_infer
+        im, res, dt = det.infer1(cap.read()[1])
+        cv2.imshow('yolo', im)#'''
 

@@ -12,7 +12,7 @@ from glob import glob; from time import time, sleep
 from torch import empty, cuda; import numpy as np
 
 
-#######################################################
+##########################################################################################
 def Setup4Infer(data_dir, thd=0.6):
     data_name = 'doors'; json = data_dir+'/annotations.json'
     register_coco_instances(data_name, {}, json, data_dir)
@@ -37,7 +37,7 @@ def Setup4Infer(data_dir, thd=0.6):
 RES = lambda x,s: cv2.resize(x, NewSZ(x,s))
 INT = lambda x,f=1: tuple(int(i*f) for i in x) # round
 RSZ = lambda x,s: cv2.resize(x,s) if type(s)==tuple else cv2.resize(x,None,fx=s,fy=s)
-#######################################################
+##########################################################################################
 def NewSZ(wh, sz=1.0):
     if type(wh)==cv2.UMat: wh = wh.get()
     if type(wh)==np.ndarray: wh = wh.shape[1::-1]
@@ -68,7 +68,7 @@ def Infer2Img(im, pred, meta, sz=1.0, info=''): # BGR
 weight = dict(door_open=1, door_close=1)
 id_cls = lambda CLS: {i:c for i,c in enumerate(CLS)}
 cls_id = lambda CLS: {c:i for i,c in enumerate(CLS)}
-#######################################################
+##########################################################################################
 def Sift_CLS(out, meta, cls=[], mod='ex'):
     if type(cls) not in (list,tuple): cls = [cls]
     cid = meta.thing_classes; id = cid.index; idx = []
@@ -105,7 +105,7 @@ def Sift_BOX(out, meta, thd=10, wt=None):
     return out[idx]
 
 
-#######################################################
+##########################################################################################
 if __name__ == '__main__':
     root = os.path.expanduser('~/GLD_Git/Data_Door/coco_door3')
     pred, meta = Setup4Infer(root, 0.6)

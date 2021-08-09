@@ -4,7 +4,6 @@
 import numpy as np
 import os, cv2, torch
 import infer4robot as Seg
-
 from detectron2.structures import boxes
 
 
@@ -65,16 +64,7 @@ def Lumin(im, out, meta, thd=188):
             idx.append(i); continue
         if c not in glass: continue # glass?
         lumin(im,box[i])
-
-
-
-    
-
-
-
-
-
-
+        # something to do
 
 
 ##########################################################################################

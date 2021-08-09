@@ -10,7 +10,7 @@ from tqdm import trange, tqdm
 
 
 INT = lambda x,f=1: tuple(int(i*f) for i in x)
-REN = lambda x: ' '.join(x[:-4].split()[::-1])+x[-4:]
+INV = lambda x: ' '.join(x[:-4].split()[::-1])+x[-4:]
 ##########################################################################################
 def test_cam(id=0):
     cap = cv2.VideoCapture(id)
@@ -27,6 +27,12 @@ def format_json(src:str, dst=None, dt=4):
     assert src.endswith('.json') and os.path.isfile(src)
     with open(src,'r') as ff: js = json.load(ff)
     with open(dst,'w') as ff: json.dump(js,ff,indent=dt)
+
+
+def rename(src, fun=lambda x:x.replace(' ','')):
+    assert os.path.isdir(src); os.chdir(src)
+    for i in os.listdir(): os.rename(i, fun(i))
+    os.chdir(os.path.dirname(__file__))
 
 
 ##########################################################################################
@@ -66,29 +72,27 @@ def vid_process(vid, dst, gap=1, rot=0): # rot=(0,1,2,3)
         if i%gap != 0: continue
         if rot>0: im = cv2.rotate(im, rot-1)
         if type(dst)==cv2.VideoWriter: dst.write(im)
-        elif type(dst)==str:
-            cv2.imwrite(dst+'_%6d.jpg'%i, im)'''
+        elif type(dst)==str: cv2.imwrite(dst+'_%d.jpg'%i, im)'''
     N = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
     for i in trange(N, ascii=True):
         rt, im = vid.read(); #assert rt
         if i%gap!=0 or not rt: continue
         if rot>0: im = cv2.rotate(im, rot-1)
         if type(dst)==cv2.VideoWriter: dst.write(im)
-        elif type(dst)==str:
-            cv2.imwrite(dst+'_%6d.jpg'%i, im)
+        elif type(dst)==str: cv2.imwrite(dst+'_%d.jpg'%i, im)
 
 
 def vid2img(src='.', gap=1, rot=0): # rot=(0,1,2,3)
-    for v in glob('%s/*.mp4'%src):
+    for v in glob(f'{src}/*.mp4'):
         dst = v[:-4]; os.makedirs(dst, exist_ok=True)
-        vid = cv2.VideoCapture(v); print('Process: %s'%v)
+        vid = cv2.VideoCapture(v); print(f'Process: {v}')
         vid_process(vid, f'{dst}/{os.path.basename(dst)}', gap, rot)
         vid.release()
 
 
 def vid_rot(src='.', gap=1, rot=0): # rot=(0,1,2,3)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    for v in glob('%s/*.mp4'%src):
+    for i,v in enumerate(glob(f'{src}/*.mp4')):
         vid = cv2.VideoCapture(v)
         fps = vid.get(cv2.CAP_PROP_FPS)
         N = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -96,7 +100,7 @@ def vid_rot(src='.', gap=1, rot=0): # rot=(0,1,2,3)
         h = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if rot in (1,3): w,h = h,w # rotate 90
 
-        dst = v[:-4]+'_.mp4'; print('Process: %s'%v)
+        dst = v[:-4]+f'_{i}.mp4'; print(f'Process: {v}')
         dst = cv2.VideoWriter(dst, fourcc, fps, (w,h))
         vid_process(vid, dst, gap, rot)
         vid.release(); dst.release()
@@ -209,11 +213,9 @@ def multi_process(func, src='.'):
 
 ##########################################################################################
 if __name__ == '__main__':
-    #test_cam()
     #binarize('hua.png')
     #vid2img(gap=10)
     vid_rot(rot=0)
-    # for 6: 0 1; 71; 1.4 432.5
     #joint_vid('.', 'fuse')
     #multi_process(blur_filter)
 

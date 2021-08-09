@@ -5,7 +5,7 @@ import os, json
 from glob import glob
 
 
-#######################################################
+##########################################################################################
 def AddItem(src, KV): # KV: [(key,val)]/{key:val}
     for ff in glob(src+'/*.json'):
         with open(ff,'rb+') as f: data = json.load(f)
@@ -15,24 +15,24 @@ def AddItem(src, KV): # KV: [(key,val)]/{key:val}
         with open(ff,'w+') as f: json.dump(data, f, indent=4)
 
 
-def ReItem(src, KON): # KON: [(key,old,new)]/{key:(old,new)}
+def ReItem(src, KON):
     for ff in glob(src+'/*.json'):
         with open(ff,'rb+') as f: data = json.load(f)
         idx = [data['imagePath'].rfind(i) for i in ('/','\\')]
         data['imagePath'] = data['imagePath'][max(idx)+1:]
         data['imageData'] = None # --nodata: remove base64
-        if type(KON)==dict: KON = [(k,*v) for k,v in KON.items()]
-        for key, old, new in KON: # only for str
-            if key in data: data[key] = data[key].replace(old,new); continue
-            for s in data['shapes']: s[key] = s[key].replace(old,new)
-        '''if type(KON) in (list,tuple): KON = {k:(o,n) for k,o,n in KON}
-        for key, (old,new) in KON.items(): # only for str
-            if key in data: data[key] = data[key].replace(old,new); continue
-            for s in data['shapes']: s[key] = s[key].replace(old,new)'''
+        if type(KON) in (list,tuple): # [(k,*v) for k,v in KON.items()]
+            for key, old, new in KON: # only for str
+                if key in data: data[key] = data[key].replace(old,new); continue
+                for s in data['shapes']: s[key] = s[key].replace(old,new)
+        elif type(KON)==dict: # {k:(o,n) for k,o,n in KON}
+            for key, (old,new) in KON.items(): # only for str
+                if key in data: data[key] = data[key].replace(old,new); continue
+                for s in data['shapes']: s[key] = s[key].replace(old,new)#'''
         with open(ff,'w+') as f: json.dump(data, f, indent=4)
 
 
-#######################################################
+##########################################################################################
 def Fit2Labelme(src, fmt, single=True, inplace=True):
     shp = dict(label='', points=[], group_id=None, shape_type='', flags={})
     out = dict(version='4.4.0', flags={}, shapes=[shp], imagePath='',
@@ -104,7 +104,7 @@ def Testin2Labelme(out, data):
         out['shapes'].append(shp.copy())
 
 
-#######################################################
+##########################################################################################
 if __name__ == '__main__':
     #Fit2Labelme('.', 'Testin', False)
     KV = {'version':'4.2.10', 'flags':{}}; AddItem('.', KV)

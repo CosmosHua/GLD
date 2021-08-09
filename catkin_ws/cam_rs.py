@@ -117,20 +117,16 @@ def rs_test(fps=15, dt=1):
 ##########################################################################################
 def rs_yolov5(yolo, cls=None):
     sys.path.append('yolov5')
-    #from yolov5.infer import yolov5_det
-    from yolov5.infer1 import yolov5_det
+    from yolov5.infer import yolov5
 
     config, devices = rs_init()
-    det = yolov5_det(yolo, cls=cls) # init yolov5
-    #Infer = lambda x: det.infer(x, '.', False)[0]
-    Infer1 = lambda x: det.infer1(x, True, True, False)
+    det = yolov5(yolo, cls=cls) # init
     while cv2.waitKey(5)!=27:
         for sn, dev in devices.items():
             im = rs_rgbd(dev)['Color']
-            #cv2.imwrite(dst,im); res = Infer(dst)
-            im, res, dt = Infer1(im); #cv2.imwrite(dst,im)
-            if res: print('%.2fms:'%dt, res) # for Infer1
-            cv2.imshow(sn, im)
+            im, _, dt, res = det.infer1(im)
+            if res: print('%.2fms:'%dt, res)
+            cv2.imshow(sn, im); #cv2.imwrite(dst,im)
     rs_stop_devices(devices); cv2.destroyAllWindows()
 
 
