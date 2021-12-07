@@ -40,7 +40,7 @@
 >   sudo dpkg -i typora_0.9.96_amd64.deb
 >
 > sudo add-apt-repository ppa:atareao/telegram; 
-> sudo apt update && sudo apt install telegram
+> sudo apt update && sudo apt install telegram virtualenv
 >
 > sudo apt install vim python3-pip git cmake htop net-tools tree pandoc
 >
@@ -51,6 +51,8 @@
 > sudo apt install python3-venv gnome-tweaks gnome-shell-extensions
 >
 > sudo apt install libfreeimage3 libfreeimage-dev # install FreeImage
+>
+> virtualenv -p /usr/bin/python3 env; source env/bin/activate; deactivate
 
 ---
 
@@ -63,7 +65,7 @@
 
 > sudo pip3 install ipython virtualenv # python -m virtualenv `xxx`
 >
-> pip3 install torch==1.6.0 torchvision==0.7.0
+> pip3 install torch==1.6.0 torchvision==0.7.0 pyqt5
 >
 > pip3 install cython open3d matplotlib pillow labelme filterpy
 >
@@ -77,7 +79,7 @@
 > pip3 install SpeechRecognition
 > sudo apt-get install python3-pyaudio
 >
-> pip install pyttsx3 playsound pydub
+> pip3 install pyttsx3 playsound pydub
 > sudo apt install python3-espeak # ffmpeg espeak libespeak1
 >
 > sudo apt install tcl-dev tk-dev python3-tk # No module named 'tkinter'

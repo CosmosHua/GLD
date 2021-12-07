@@ -116,10 +116,10 @@ def hand_data(cap, dst='Hand'):
             _, im = cap.read(); k = cv2.waitKey(5)
             im = cv2.flip(im,1); res = mp_infer(pose,im)
             if res.multi_hand_landmarks: # find hand
-                i = res.multi_hand_landmarks[0]
+                i = res.multi_hand_landmarks[0] # normalize
                 p = [(m.x,m.y) for m in i.landmark]*wh/wh[1]
                 if k>0 and chr(k) in CLS: K = chr(k) # trigger
-                if K in CLS: PS[K].append(p-p[9]) # local coordinates
+                if K in CLS: PS[K].append(p-p[9]) # localize/centralize
                 draw.draw_landmarks(im, i, det.HAND_CONNECTIONS, hand, hand)
             if k==32: K = '' # pause
             cv2.putText(im, K, (5,20), 4, 0.7, (255,)*3)
@@ -144,21 +144,23 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 ##########################################################################################
 class HandDataset(Dataset):
-    def __init__(self, src='Hand'):
+    def __init__(self, src='Hand', s=1E-5):
         P = np.load(src+'.npz'); self.data = []
         for i,(k,v) in enumerate(P.items()):
             self.data += [(i,p.astype('float32')) for p in v]
-        self.x_transform = lambda x: torch.ravel(torch.randn(2)*x)
+        # x_transform: flip + scale, keypoint jitter with magnitude s/2
+        #self.x_transform = lambda x: torch.ravel(torch.randn(2)*(x+(torch.rand(x.shape)-0.5)*s))
+        self.x_transform = lambda x: torch.ravel(torch.randn(2)*(1+(torch.rand(x.shape)-0.5)*s)*x)
         self.y_transform = None # lambda x: torch.tensor(x)
         self.cls = [k for k in P]; print(self.cls)
 
     def __len__(self): return len(self.data)
 
     def __getitem__(self, idx):
-        y, x = self.data[idx] # flip + scale
+        y, x = self.data[idx]
         if self.x_transform: x = self.x_transform(x)
         if self.y_transform: y = self.y_transform(y)
-        return x, y
+        return x, y # y=label, x=key_points (u,v)
 
 
 import torch.nn as nn
@@ -282,6 +284,7 @@ from itertools import combinations as cmb
 INT = lambda x,s=1: tuple(int(i*s) for i in x)
 MOD = {'m':'Move', 'p':'Pose', 'c':'Chasis', 'g':'Grip'}
 ##########################################################################################
+# TODO: check status switch or not for once action
 def flush(cap, n=8): # flush cam
     for i in range(n): cap.grab()
 
@@ -335,9 +338,8 @@ def hand_control(cap):
                     x = i2mod.get(net(x)[0].argmax().item(),'')
                     if x in 'mpc' and x!=K: # trigger
                         p0, r0 = p[9], norm(p[9]-p[13])
-                    K = x # update mode
-                elif sum(norm(d[1]-d[0]) for d in cmb(p[6:9],2))\
-                    /3<norm(p[6]-p[5])/4: K = 'g' # dist->grip'''
+                    K = x # update mode. # distance -> grip
+                elif sum(norm(d[1]-d[0]) for d in cmb(p[6:9],2))/3<norm(p[6]-p[5])/4: K = 'g'
                 if K in 'mpc': xyz = get_xyz(im, p, p0, r0, K, S)
                 draw.draw_landmarks(im, i, det.HAND_CONNECTIONS, hand, hand)
             else: K = '' # reset mode
