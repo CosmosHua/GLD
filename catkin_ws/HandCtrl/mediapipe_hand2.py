@@ -162,7 +162,7 @@ from std_msgs.msg import Int8
 from geometry_msgs.msg import Twist, Vector3
 ##########################################################################################
 if __name__ == '__main__':
-    os.chdir(os.path.dirname(__file__))
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     cap = cv2.VideoCapture(-1); hand_infer(cap)
     '''rospy.init_node('hand_ctrl', anonymous=True)
     HM = rospy.Publisher('/xarm/go_ready', Int8, queue_size=1).publish

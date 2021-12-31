@@ -363,7 +363,7 @@ from geometry_msgs.msg import Twist, Vector3
 ##########################################################################################
 if __name__ == '__main__':
     cap = cv2.VideoCapture(-1)
-    os.chdir(os.path.dirname(__file__))
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     #mp_face_det(cap); #mp_face_mesh(cap)
     #mp_hand_pose(cap); #mp_body_pose(cap)
     #mp_holistic(cap); #mp_objectron(cap)

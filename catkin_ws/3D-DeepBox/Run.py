@@ -44,7 +44,8 @@ parser.add_argument('--save', default='eval/out/',
 
 
 def main():
-    weights_path = os.path.abspath(os.path.dirname(__file__)) + '/weights'
+    root = os.path.dirname(os.path.abspath(__file__))
+    weights_path = root + '/weights'
     model_lst = [x for x in sorted(os.listdir(weights_path)) if x.endswith('.pkl')]
     assert len(model_lst)>0, 'No previous model found, please train first!'
 
@@ -57,7 +58,7 @@ def main():
     model.eval()
 
     # load yolo
-    yolo_path = os.path.abspath(os.path.dirname(__file__)) + '/weights'
+    yolo_path = root + '/weights'
     yolo = cv_Yolo(yolo_path)
 
     # TODO: clean up how this is done. flag?
@@ -70,13 +71,13 @@ def main():
         image_dir = 'eval/video/image_2/'
         cal_dir = 'eval/video/'
 
-    image_dir = os.path.abspath(os.path.dirname(__file__)) + '/' + image_dir
+    image_dir = root + '/' + image_dir
     # using P_rect from global calibration file
-    calib_path = os.path.abspath(os.path.dirname(__file__)) + '/' + cal_dir
+    calib_path = root + '/' + cal_dir
     calib_file = calib_path + 'calib_cam_to_cam.txt'
 
     # using P from each frame
-    # calib_path = os.path.abspath(os.path.dirname(__file__)) + '/Kitti/testing/calib/'
+    # calib_path = root + '/Kitti/testing/calib/'
 
     averages = ClassAverages.ClassAverages()
     imgs = [i for i in os.listdir(image_dir) if i.split('.')[-1] in ('png','jpg','jpeg')]

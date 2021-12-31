@@ -23,7 +23,8 @@ single_car = False
 
 
 def main():
-    weights_path = os.path.abspath(os.path.dirname(__file__)) + '/weights'
+    root = os.path.dirname(os.path.abspath(__file__))
+    weights_path = root + '/weights'
     model_lst = [x for x in sorted(os.listdir(weights_path)) if x.endswith('.pkl')]
     assert len(model_lst)>0, 'No previous model found, please train first!'
 
@@ -35,7 +36,7 @@ def main():
     model.eval()
 
     # defaults to /eval
-    dataset = Dataset(os.path.abspath(os.path.dirname(__file__)) + '/eval')
+    dataset = Dataset(root + '/eval')
     averages = ClassAverages.ClassAverages()
 
     all_images = dataset.all_objects()

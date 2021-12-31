@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 # coding: utf-8
 
+
+
 import time as tm
 import numpy as np
 import os, cv2, json
@@ -193,6 +195,32 @@ def blur_filter(src, dst=None, dev='D435I'):
         json.dump(dst, ff, indent=4); return dst
 
 
+##########################################################################################
+# Ref: https://blog.csdn.net/Hu_weichen/article/details/81353478
+# Ref: https://github.com/jpatts/image_matching/blob/master/solution.py
+# Ref: https://vimsky.com/examples/detail/python-method-cv2.findFundamentalMat.html
+def match_filter(pt1, pt2, matrix='homo', mod=8, thd=2, prob=0.99):
+    assert pt1.shape==pt2.shape and len(pt1)>3
+    if matrix in 'homography': # mod=(0,4,8,16), N>3
+        assert mod in (0, cv2.LMEDS, cv2.RANSAC, cv2.RHO)
+        M, idx = cv2.findHomography(pt1, pt2, mod, thd, confidence=prob)
+    elif matrix in 'fundamental': # mod=(1,2,4,8), N>6
+        assert mod in (cv2.FM_7POINT, cv2.FM_8POINT, cv2.LMEDS, cv2.RANSAC)
+        M, idx = cv2.findFundamentalMat(pt1, pt2, mod, thd, confidence=prob)
+    elif matrix in 'essential': # thd: K/CameraMatrix
+        M, idx = cv2.findEssentialMat(pt1, pt2, thd, mod, threshold=prob)
+    else: # handcraft: similar cv2.findHomography()
+        pt1 = pt1[:,:2].astype('float32') # [N>3,2]
+        pt2 = pt2[:,:2].astype('float32'); idx = []
+        for i in range(2000): # H: Homography Matrix
+            i = random.sample(range(len(pt1)), 4)
+            H = cv2.getPerspectiveTransform(pt1[i], pt2[i])
+            proj = cv2.perspectiveTransform(pt1[None,:], H)[0]
+            i = np.linalg.norm(pt2-proj, axis=1)<thd # inliers
+            if np.count_nonzero(i)>len(idx): idx = i; M = H
+    idx = np.where(idx>0)[0]; return M, idx # inliers
+
+
 from threading import Thread
 from multiprocessing import Process, Pool, cpu_count
 ##########################################################################################
@@ -211,11 +239,28 @@ def multi_process(func, src='.'):
     pool.close(); pool.join()#'''
 
 
+IRT = lambda n,p=3.5,k=12: [0.99*(1+p/100/k)**(n*k)-1, n*p/100]
+##########################################################################################
+def interest_ratio(N=20, p=3.5, g=2):
+    import matplotlib
+    matplotlib.use('TkAgg') #'Agg'
+    import matplotlib.pyplot as plt
+    x = np.arange(0, N, 1/g)
+    #x = np.linspace(0, N, N*g)
+    y = np.asarray(IRT(x,p)).reshape(2,-1)
+    plt.plot(x, y[0], 'b:p', x, y[1], 'r-.p')
+    #plt.plot(x, y[0], 'b:p', label=f'compound {p}')
+    #plt.plot(x, y[1], 'r-.p', label=f'simple {p}')
+    plt.xlabel('Year'); plt.ylabel('Interest')
+    plt.legend(); plt.show()
+
+
 ##########################################################################################
 if __name__ == '__main__':
     #binarize('hua.png')
     #vid2img(gap=10)
-    vid_rot(rot=0)
+    #vid_rot(rot=0)
     #joint_vid('.', 'fuse')
     #multi_process(blur_filter)
+    interest_ratio(20)
 

@@ -26,7 +26,7 @@ class Dataset(data.Dataset):
         # use a relative path instead?
 
         # TODO: which camera cal to use, per frame or global one?
-        self.proj_matrix = get_P(os.path.abspath(os.path.dirname(os.path.dirname(__file__)) +
+        self.proj_matrix = get_P(os.path.dirname(os.path.dirname(os.path.abspath(__file__)) +
             '/camera_cal/calib_cam_to_cam.txt'))
 
         self.ids = [x.split('.')[0] for x in sorted(os.listdir(self.top_img_path))] # name of file

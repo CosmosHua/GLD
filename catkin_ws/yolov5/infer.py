@@ -145,7 +145,7 @@ class yolov5(object):
 
 ##########################################################################################
 if __name__ == '__main__':
-    os.chdir(os.path.dirname(__file__))
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     '''with open('yolov5/data/cooc.yaml') as f:
         cls = yaml.safe_load(f)['names'] # det.names'''
     det = yolov5('yolov5l.pt', cls=[0,63]) # 0=person

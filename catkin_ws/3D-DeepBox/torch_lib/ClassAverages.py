@@ -15,7 +15,7 @@ class NumpyEncoder(json.JSONEncoder):
 class ClassAverages:
     def __init__(self, classes=[]):
         self.dimension_map = {}
-        self.filename = os.path.abspath(os.path.dirname(__file__)) + '/class_averages.txt'
+        self.filename = os.path.dirname(os.path.abspath(__file__)) + '/class_averages.txt'
 
         if len(classes) == 0: # eval mode
             self.load_items_from_file()

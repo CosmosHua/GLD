@@ -1,0 +1,7 @@
+numpy
+PyYAML
+pyproj
+ExifRead
+matplotlib
+opencv-python
+Pillow
