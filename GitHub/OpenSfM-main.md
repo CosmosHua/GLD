@@ -2,6 +2,7 @@ OpenSfM ![Docker workflow](https://github.com/mapillary/opensfm/workflows/Docker
 =======
 
 ## Overview
+
 OpenSfM is a Structure from Motion library written in Python. The library serves as a processing pipeline for reconstructing camera poses and 3D scenes from multiple images. It consists of basic modules for Structure from Motion (feature detection/matching, minimal solvers) with a focus on building a robust and scalable reconstruction pipeline. It also integrates external sensor (e.g. GPS, accelerometer) measurements for geographical alignment and robustness. A JavaScript viewer is provided to preview the models and debug the pipeline.
 
 <p align="center">
@@ -13,13 +14,16 @@ Checkout this [blog post with more demos](http://blog.mapillary.com/update/2014/
 
 ## Getting Started
 
-* [Building the library][]
-  * first install [opencv](http://opencv.org/) & [ceres solver](http://ceres-solver.org/)
+* [Building the library](https://opensfm.org/docs/building.html)
+  * First, install [opencv](http://opencv.org/) & [ceres solver](http://ceres-solver.org/), meanwhile clone [OpenSfM](git clone --recursive https://github.com/mapillary/OpenSfM).
+    * https://github.com/mapillary/OpenSfM
+    * https://github.com/OpenDroneMap/OpenSfM
     * http://ceres-solver.org/installation.html
     * http://ceres-solver.org/ceres-solver-2.0.0.tar.gz
     * `cd ceres-solver; mkdir build; cd build`
     * `cmake ..; make -j3; sudo make install`
   * `git clone --recursive https://github.com/mapillary/OpenSfM`
+    * OR: `cd OpenSfM; git submodule update --init --recursive`
   * `cd OpenSfM; pip3 install -r requirements.txt --user; python3 setup.py build`
     * https://github.com/mapillary/OpenSfM/blob/main/Dockerfile
 * [Running a reconstruction][]

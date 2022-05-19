@@ -3,6 +3,8 @@
 
 import numpy as np
 import os, cv2, json
+from matplotlib import pyplot as plt
+from matplotlib import use; use('TkAgg')
 
 
 ##########################################################################################
@@ -40,22 +42,27 @@ class Camera:
         u = 2*x - u; v = 2*y - v # reverse calibrate
         return u, v
 
+    def K(self): # K-matrix
+        sz = self.size; fx, fy = sz*self.focal_x, sz*self.focal_y
+        cx, cy = self.width/2+sz*self.c_x, self.height/2+sz*self.c_y
+        return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+
+    def DistCoeffs(self):
+        return np.array([self.k1, self.k2, self.p1, self.p2, self.k3])
+
 
 ##########################################################################################
-def load_feature(img, cam=0, fix=0):
-    xy = np.load(f'{img}.features.npz')['points'].T[:2]
+def load_feature(im, cam=0, un=0):
+    xy = np.load(im+'.features.npz')['points'].T[:2]
     if type(cam)==str: cam = Camera(cam)
     if type(cam)==Camera:
-        if fix: xy = cam.undistort(*xy)
+        if un: xy = cam.undistort(*xy)
         xy = cam.norm(*xy) # (2,N)
     return np.array(xy).T # (N,2)
 
 
-from odm_sfm import INFO, roi_ct2
-from matplotlib import pyplot as plt
-##########################################################################################
-def cal_cam_axis(translation, rotation):
-    R, J = cv2.Rodrigues(-rotation)
+def calc_axis_cam(translation, rotation):
+    R,J = cv2.Rodrigues(-rotation)
     O = R.dot(-translation) # cam origin
     A = np.diag([1.0]*3) # cam axis
     for i in range(len(A)): # X,Y,Z
@@ -63,72 +70,128 @@ def cal_cam_axis(translation, rotation):
     return (O,*A) # O,X,Y,Z
 
 
-def filter_reconstruct(odm, thd=0.5):
-    cam = Camera(odm+'/cameras.json')
-    rec = '/opensfm/reconstruction.topocentric.json'
-    if os.path.isfile(odm+rec[:-4]+'bak'):
-        os.rename(odm+rec[:-4]+'bak', odm+rec)
-    with open(odm+rec) as f: data = json.load(f)[0]
-    points = data['points']; shots = data['shots']
-    '''for k,v in shots.items():
+import logging as log; INFO = log.getLogger('Joshua').info
+log.basicConfig(level=log.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+##########################################################################################
+def filter_reconstruct(src, thd=0.3):
+    src = os.path.abspath(src); res = {}
+    if os.path.isdir(src+'/opensfm'): # for odm
+        cam = src+'/cameras.json'; src += '/opensfm'
+        rec = src+'/reconstruction.topocentric.json'
+    elif os.path.isfile(src+'/../cameras.json'):
+        cam = src+'/../cameras.json' # for odm
+        rec = src+'/reconstruction.topocentric.json'
+    elif os.path.isfile(src+'/camera_models.json'):
+        cam = src+'/camera_models.json' # for sfm
+        rec = src+'/reconstruction.json'
+    cam = Camera(cam); bak = rec[:-4]+'bak'
+    if os.path.isfile(bak):
+        if os.path.isfile(rec): os.remove(rec)
+        os.rename(bak, rec) # for win
+    with open(rec) as f: data = json.load(f)[0]
+    os.rename(rec, bak); INFO(f'Filter: {rec}')
+
+    from opensfm.dataset import DataSet
+    T = DataSet(src).load_tracks_manager()
+    for im in T.get_shot_ids():
+        v = data['shots'][im]
         rotation =  np.array(v['rotation'])
         translation = np.array(v['translation'])
-        gps_position = np.array(v['gps_position'])
-        d0 = np.linalg.norm(translation)
-        d1 = np.linalg.norm(gps_position)
+        O, X, Y, Z = calc_axis_cam(translation, rotation)
+        feat = load_feature(f'{src}/features/{im}', cam, 1)
+        for tid,x in T.get_shot_observations(im).items():
+            if not tid in data['points']: continue
+            dp = data['points'][tid]['coordinates']-O
+            ddp = np.linalg.norm(dp)
+            u,v = feat[x.id][:2] # fid
+            qt = u*X + v*Y + Z
+            qt /= np.linalg.norm(qt)
+            delta = np.dot(dp, qt)
+            dis = np.sqrt(ddp**2 - delta**2)
+            if tid not in res: res[tid] = dis
+            elif dis>res[tid]: res[tid] = dis # meters
+            #print(f'{im} %6s %6s %.3f'%(tid,x.id,dis))
 
-        R, J = cv2.Rodrigues(-rotation)
-        pt = R.dot(-translation)
-        dis = np.linalg.norm(pt-gps_position)
-        #print(k, d1-d0, dis)#'''
-
-    res = {}; last = ''; INFO(odm+rec)
-    with open(odm+'/opensfm/tracks.csv') as f:
+    '''with open(src+'/tracks.csv') as f:
         tracks = f.readlines()[1:]
-    for tk in tracks:
-        tk = tk.split(); img, tid, fid = tk[:3]
-        #u,v = cam.norm(*np.float64(tk[3:5]))
-        if not tid in points: continue
-        # some tid not in the points-cloud
-        pt = points[tid]['coordinates']
-
-        if img != last:
-            last = img; vt = shots[img]
-            rotation =  np.array(vt['rotation'])
-            translation = np.array(vt['translation'])
-            gps_position = np.array(vt['gps_position'])
-            O, X, Y, Z = cal_cam_axis(translation, rotation)
-            feat = load_feature(f'{odm}/opensfm/features/{img}', cam, 1)
-
-        dp = pt - O
-        d1 = np.linalg.norm(dp)
-        u, v = feat[int(fid)][:2]
+    for tk in tracks: # skip 1st-row
+        im, tid, fid, *x = tk.split()
+        #u,v = cam.norm(*np.float64(x[:2]))
+        if im != old: # update feat+OXYZ
+            v = data['shots'][im]; old = im
+            rotation =  np.array(v['rotation'])
+            translation = np.array(v['translation'])
+            O, X, Y, Z = calc_axis_cam(translation, rotation)
+            feat = load_feature(f'{src}/features/{im}', cam, 1)
+        if not tid in data['points']: continue
+        dp = data['points'][tid]['coordinates']-O
+        ddp = np.linalg.norm(dp)
+        u,v = feat[int(fid)][:2]
         qt = u*X + v*Y + Z
         qt /= np.linalg.norm(qt)
         delta = np.dot(dp, qt)
-        dis = np.sqrt(d1*d1 - delta*delta)
+        dis = np.sqrt(ddp**2 - delta**2)
         if tid not in res: res[tid] = dis
         elif dis>res[tid]: res[tid] = dis # meters
-        #if dis>thd: print(f'{img} %6s %6s %.3f'%(tid,fid,dis))
+        #print(f'{im} %6s %6s %.3f'%(tid,fid,dis))'''
+
     dis = [*res.values()]; md = np.mean(dis); thd = min(thd,md)
     out = {k:v for k,v in res.items() if v>thd}; #print(out)
-    INFO('Out=%d/%d, Thd=%.3f, Max=%.3f'%(len(out),len(res),thd,max(dis)))
     #plt.hist(dis, [0.01,0.05,0.1,0.5,1,2]); plt.show()
-
     for tid in out: data['points'].pop(tid)
-    os.rename(odm+rec, odm+rec[:-4]+'bak')
-    with open(odm+rec,'w') as f: json.dump([data], f, indent=4)
-    INFO(f'Filter: {odm+rec}'); return out
+    with open(rec,'w') as f: json.dump([data], f, indent=4)
+    INFO('Out=%d/%d, Thd=%.3f, Max=%.3f'%(len(out),len(res),thd,max(dis)))
+
+
+##########################################################################################
+def check_gcp(gcp, cam, org=0, n=0):
+    res = {}; K = Camera(cam).K()
+    if os.path.isdir(org):
+        from opensfm.dataset import DataSet
+        ref = DataSet(org).load_reference()
+    with open(gcp) as f: data = f.readlines()[n:]
+    for v in data: # skip first n-rows
+        v = v.split(); im = v[-1]
+        v = v[:5] + [np.inf]*2
+        if os.path.isdir(org): # lat,lon.alt->xyz
+            lon,lat,alt = [float(i) for i in v[:3]]
+            v[:3] = ref.to_topocentric(lat,lon,alt)
+        if im not in res: res[im] = [v]
+        else: res[im].append(v)
+
+    for k,v in res.items():
+        v = res[k] = np.float64(v)
+        if len(v)<5: continue # skip
+        pt, uv = v[:,:3].copy(), v[:,3:5] # copy()->new mem-block
+        _, Rvec, Tvec, Ins = cv2.solvePnPRansac(pt, uv, K, None)
+        xy, Jacob = cv2.projectPoints(pt, Rvec, Tvec, K, None)
+        err = v[:,5] = np.linalg.norm(xy.squeeze()-uv, axis=1)
+
+        his = np.histogram(err, bins=[*range(11),np.inf])[0]
+        for c in range(len(his)-1,0,-1): # len(v)=sum(his)
+            if sum(his[c:])>=len(v)*0.2: break
+        idx = np.where(err<=c)[0]; #print(c, his)
+        if len(idx)<7: continue # skip
+        _, Rvec, Tvec = cv2.solvePnP(pt[idx], uv[idx], K, None)
+        xy, Jacob = cv2.projectPoints(pt, Rvec, Tvec, K, None)
+        v[:,-1] = np.linalg.norm(xy.squeeze()-uv, axis=1) # err2
+
+    out = os.path.abspath(gcp+'.err'); print(out)
+    with open(out,'w') as f:
+        for k,v in zip(data, np.vstack([*res.values()])):
+            f.write(k[:-1]+'%11.3f%11.3f\n'%(*v[-2:],))
 
 
 import gzip, pickle
 ##########################################################################################
-def export_gz_check(src, check, dst, thd=1, dir2=''):
+def export_gz_check(src, check, dst, thd=1, src2=''):
     if os.path.isfile(src+'/camera_models.json'): # sfm
         cam1 = Camera(src+'/camera_models.json', 0) # 0=GPS
         cam2 = Camera(src+'/camera_models.json', 1) # 1=RTK
     elif os.path.isfile(src+'/cameras.json'): # odm
         cam1 = cam2 = Camera(src+'/cameras.json'); src += '/opensfm'
+        if os.path.isfile(src2+'/cameras.json'): # RTK
+            cam2 = Camera(src2+'/cameras.json')
     mt_dir = src+'/matches'+('' if os.path.isdir(src+'/matches') else '_gcp')
     info = 4*'%9.6f '%(cam1.focal_x, cam1.focal_y, cam2.focal_x, cam2.focal_y)+'\n'
     info += 4*'%9d '%(cam1.width, cam1.height, cam2.width, cam2.height)+'\n'
@@ -147,24 +210,25 @@ def export_gz_check(src, check, dst, thd=1, dir2=''):
                 for i,j in fid: f.write(4*'%9.6f '%(*ft1[i],*ft2[j])+'\n')
             os.system(f'./{os.path.relpath(check)} {txt} {thd} {js}')
             #os.system(f'./{os.path.relpath(check)} {txt} {thd}')
+            if not os.path.isfile(js): print(f'No: {js}'); continue
             with open(js,'r') as f: x = json.load(f)
             res[im1,im2] = [int(k[1:]) for k in x['errMatch']]
-            if dir2: show_err_match(src, txt, dir2) # need txt+js
+            if src2: show_err_match(src, txt, src2) # need txt+js
     return res # idx of invalid fid of gz
 
 
 ##########################################################################################
-def show_err_match(src, file, dir2='', sh=5):
+def show_err_match(src, file, src2='', sh=5):
     if file.endswith('.txt'):
         txt, js = file, file[:-3]+'json'
     elif file.endswith('.json'):
         txt, js = file[:-4]+'txt', file
-    if not os.path.isdir(dir2): dir2 = src
+    if not os.path.isdir(src2): src2 = src
     if os.path.isdir(src+'/../images'): src += '/..'
-    if os.path.isdir(dir2+'/../images'): dir2 += '/..'
+    if os.path.isdir(src2+'/../images'): src2 += '/..'
     img0, img1 = os.path.basename(txt)[:-4].split('-')
     img0 = cv2.imread(f'{src}/images/{img0}')
-    img1 = cv2.imread(f'{dir2}/images/{img1}')
+    img1 = cv2.imread(f'{src2}/images/{img1}')
     sz0, sz1 = max(img0.shape), max(img1.shape)
 
     with open(txt,'r') as f:
@@ -180,15 +244,16 @@ def show_err_match(src, file, dir2='', sh=5):
     #mat0 = np.float64(x['Matrix0'].split()).reshape(3,-1)
     #mat1 = np.float64(x['Matrix1'].split()).reshape(3,-1)
 
+    from odm_sfm import roi_ct2
     for k,v in em.items():
         pt = pts[int(k[1:])]
         x0 = int(pt[0]*fx0*sz0 + w0/2)
         y0 = int(pt[1]*fy0*sz0 + h0/2)
         x1 = int(pt[2]*fx1*sz1 + w1/2)
-        y1 = int(pt[3]*fy1*sz1 + h1/2) # img: (sz+bt, sz*2, 3)
-        img = roi_ct2(img0, img1, (x0,y0), (x1,y1), sz=501, bt=30)
-        draw_center_cross2(img, (0,0,255), 6, f'{k}: {v}')
-        cv2.imshow(os.path.basename(js), img)
+        y1 = int(pt[3]*fy1*sz1 + h1/2) # im: (sz+bt, sz*2, 3)
+        im = roi_ct2(img0, img1, (x0,y0), (x1,y1), sz=501, bt=30)
+        draw_center_cross2(im, (0,0,255), 6, f'{k}: {v}')
+        cv2.imshow(os.path.basename(js), im)
         if cv2.waitKey(sh) in (27,32): break
     cv2.destroyAllWindows()
 
@@ -213,13 +278,16 @@ def draw_center_cross2(im, color, r, txt=''):
 ##########################################################################################
 if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
-    RTK = 'data_part/out-sift/odm-RTK-20211108'
-    GPS = 'data_part/out-sift/odm-GPS-20211109'
-    GCP = 'data_part/out-sift/sfm-GCP-20211108-20211109'
-    #filter_reconstruct(RTK)
+    # os.chdir('data_part/out-sift'); GPS = 'odm-GPS-20211109'
+    # RTK = 'odm-RTK-20211108'; filter_reconstruct(RTK, 0.3)
 
-    checker = 'checker'; dst = 'tmp'
-    os.system(f'g++ check_gz.cpp -o {checker}')
-    #export_gz_check(GPS, checker, dst, dir2=1)
-    export_gz_check(GCP, checker, dst, dir2=RTK)
+    '''exe = 'checker'; GCP = 'sfm-GCP-20211108-20211109'
+    os.system(f'g++ check_gz.cpp -o {exe}')
+    #export_gz_check(GPS, exe, 'tmp', src2=1)
+    export_gz_check(GCP, exe, 'tmp', src2=RTK)#'''
+
+    os.chdir('/media/hua/20643C51643C2BC2/odm/iter_none')
+    src = 'odm-GPS-20211108-20211109/opensfm'
+    gcp = src+'/gcp_list.txt'; cam = src+'/camera_models.json'
+    check_gcp(gcp, cam, 'odm-RTK-20211108/opensfm')
 

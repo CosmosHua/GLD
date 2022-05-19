@@ -3,8 +3,9 @@
 
 import os, setuptools
 
+
 readme, requirement = '', ['']
-dst = 'odm_sfm'; ver = '0.1.0a7'
+dst = 'odm_sfm'; ver = '0.1.0a12'
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 if os.path.isfile('README.md'):
@@ -13,31 +14,25 @@ if os.path.isfile('README.md'):
 if os.path.isfile('requirements.txt'):
     with open('requirements.txt') as f:
         requirement = f.read().split()
-# if os.path.isfile('src/check_gz.cpp'):
-#     os.system(f'g++ src/check_gz.cpp -o {dst}/check')
-
 
 setuptools.setup(
     version = ver,
     author = 'Glodon',
-    platforms = 'Ubuntu',
     python_requires = '>=3.6',
     name = dst.replace('_','-'),
+    long_description = readme,
+    install_requires = requirement,
     license = 'None', # GUN LGPLv2.1
     author_email = 'fuh-d@glodon.com',
     description = 'RTK calibrate GPS.',
+    package_data={'': ['*.txt','*.md']},
     url = 'https://pypi.org/project/odm-sfm/',
-    long_description = readme,
-    install_requires = requirement,
-    long_description_content_type = 'text/markdown',
-    package_data={'': ['check','*.txt','*.md']},
     packages = setuptools.find_packages(),
     #packages = setuptools.find_namespace_packages(),
+    long_description_content_type = 'text/markdown',
     classifiers = ['Operating System :: POSIX :: Linux',
+                    'Operating System :: Microsoft :: Windows,
                     'Programming Language :: Unix Shell',
-                    'Programming Language :: Python :: 3.6'],
-    # entry_points = {'console_scripts': [
-    #                 f'odm_lla = {dst}.ODM_SfM:ODM_img_lla2',
-    #                 f'odm_log = {dst}.ODM_SfM:parse_log'] },
-    scripts = [f'{dst}/odm_sfm_lla'],
+                    'Programming Language :: Python :: 3.6+'],
+    scripts = [f'{dst}/odm_sfm_bash'],
 )

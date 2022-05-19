@@ -1,7 +1,12 @@
+bs4
+vmem
 numpy
 PyYAML
+Pillow
 pyproj
+plyfile
 ExifRead
+py-cpuinfo
 matplotlib
 opencv-python
-Pillow
+# https://github.com/OpenDroneMap/ODM/blob/master/requirements.txt

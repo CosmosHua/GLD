@@ -3,7 +3,6 @@
 
 import numpy as np
 import os, cv2, json
-from odm_sfm import INFO
 
 
 ##########################################################################################
@@ -41,20 +40,27 @@ class Camera:
         u = 2*x - u; v = 2*y - v # reverse calibrate
         return u, v
 
+    def K(self): # K-matrix
+        sz = self.size; fx, fy = sz*self.focal_x, sz*self.focal_y
+        cx, cy = self.width/2+sz*self.c_x, self.height/2+sz*self.c_y
+        return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+
+    def DistCoeffs(self):
+        return np.array([self.k1, self.k2, self.p1, self.p2, self.k3])
+
 
 ##########################################################################################
-def load_feature(img, cam=0, fix=0):
-    xy = np.load(f'{img}.features.npz')['points'].T[:2]
+def load_feature(im, cam=0, un=0):
+    xy = np.load(im+'.features.npz')['points'].T[:2]
     if type(cam)==str: cam = Camera(cam)
     if type(cam)==Camera:
-        if fix: xy = cam.undistort(*xy)
+        if un: xy = cam.undistort(*xy)
         xy = cam.norm(*xy) # (2,N)
     return np.array(xy).T # (N,2)
 
 
-##########################################################################################
-def cal_cam_axis(translation, rotation):
-    R, J = cv2.Rodrigues(-rotation)
+def calc_axis_cam(translation, rotation):
+    R,J = cv2.Rodrigues(-rotation)
     O = R.dot(-translation) # cam origin
     A = np.diag([1.0]*3) # cam axis
     for i in range(len(A)): # X,Y,Z
@@ -62,54 +68,57 @@ def cal_cam_axis(translation, rotation):
     return (O,*A) # O,X,Y,Z
 
 
-def filter_reconstruct(odm, thd=0.5):
-    cam = Camera(odm+'/cameras.json')
-    rec = '/opensfm/reconstruction.topocentric.json'
-    if os.path.isfile(odm+rec[:-4]+'bak'):
-        os.rename(odm+rec[:-4]+'bak', odm+rec)
-    with open(odm+rec) as f: data = json.load(f)[0]
-    points = data['points']; shots = data['shots']
+import logging as log; INFO = log.getLogger('Joshua').info
+log.basicConfig(level=log.INFO, format='%(asctime)s %(levelname)s: %(message)s')
+##########################################################################################
+def filter_reconstruct(src, thd=0.3):
+    src = os.path.abspath(src); res = {}
+    if os.path.isdir(src+'/opensfm'): # for odm
+        cam = src+'/cameras.json'; src += '/opensfm'
+        rec = src+'/reconstruction.topocentric.json'
+    elif os.path.isfile(src+'/../cameras.json'):
+        cam = src+'/../cameras.json' # for odm
+        rec = src+'/reconstruction.topocentric.json'
+    elif os.path.isfile(src+'/camera_models.json'):
+        cam = src+'/camera_models.json' # for sfm
+        rec = src+'/reconstruction.json'
+    cam = Camera(cam); bak = rec[:-4]+'bak'
+    if os.path.isfile(bak):
+        if os.path.isfile(rec): os.remove(rec)
+        os.rename(bak, rec) # for win
+    with open(rec) as f: data = json.load(f)[0]
+    os.rename(rec, bak); INFO(f'Filter: {rec}')
 
-    res = {}; last = ''; INFO(odm+rec)
-    with open(odm+'/opensfm/tracks.csv') as f:
-        tracks = f.readlines()[1:]
-    for tk in tracks:
-        tk = tk.split(); img, tid, fid = tk[:3]
-        #u,v = cam.norm(*np.float64(tk[3:5]))
-        if not tid in points: continue
-        # some tid not in the points-cloud
-        pt = points[tid]['coordinates']
-
-        if img != last:
-            last = img; vt = shots[img]
-            rotation =  np.array(vt['rotation'])
-            translation = np.array(vt['translation'])
-            gps_position = np.array(vt['gps_position'])
-            O, X, Y, Z = cal_cam_axis(translation, rotation)
-            feat = load_feature(f'{odm}/opensfm/features/{img}', cam, 1)
-
-        dp = pt - O
-        d1 = np.linalg.norm(dp)
-        u, v = feat[int(fid)][:2]
-        qt = u*X + v*Y + Z
-        qt /= np.linalg.norm(qt)
-        delta = np.dot(dp, qt)
-        dis = np.sqrt(d1*d1 - delta*delta)
-        if tid not in res: res[tid] = dis
-        elif dis>res[tid]: res[tid] = dis # meters
-        #if dis>thd: print(f'{img} %6s %6s %.3f'%(tid,fid,dis))
+    from opensfm.dataset import DataSet
+    T = DataSet(src).load_tracks_manager()
+    for im in T.get_shot_ids():
+        v = data['shots'][im]
+        rotation =  np.array(v['rotation'])
+        translation = np.array(v['translation'])
+        O, X, Y, Z = calc_axis_cam(translation, rotation)
+        feat = load_feature(f'{src}/features/{im}', cam, 1)
+        for tid,x in T.get_shot_observations(im).items():
+            if not tid in data['points']: continue
+            dp = data['points'][tid]['coordinates']-O
+            ddp = np.linalg.norm(dp)
+            u,v = feat[x.id][:2] # fid
+            qt = u*X + v*Y + Z
+            qt /= np.linalg.norm(qt)
+            delta = np.dot(dp, qt)
+            dis = np.sqrt(ddp**2 - delta**2)
+            if tid not in res: res[tid] = dis
+            elif dis>res[tid]: res[tid] = dis # meters
+            #print(f'{im} %6s %6s %.3f'%(tid,x.id,dis))
     dis = [*res.values()]; md = np.mean(dis); thd = min(thd,md)
     out = {k:v for k,v in res.items() if v>thd}; #print(out)
-    INFO('Out=%d/%d, Thd=%.3f, Max=%.3f'%(len(out),len(res),thd,max(dis)))
-
+    #plt.hist(dis, [0.01,0.05,0.1,0.5,1,2]); plt.show()
     for tid in out: data['points'].pop(tid)
-    os.rename(odm+rec, odm+rec[:-4]+'bak')
-    with open(odm+rec,'w') as f: json.dump([data], f, indent=4)
-    INFO(f'Filter: {odm+rec}'); return out
+    with open(rec,'w') as f: json.dump([data], f, indent=4)
+    INFO('Out=%d/%d, Thd=%.3f, Max=%.3f'%(len(out),len(res),thd,max(dis)))
 
 
 ##########################################################################################
 if __name__ == '__main__':
     RTK = 'data_part/out-sift/odm-RTK-20211108'
-    #filter_reconstruct(RTK)
+    #filter_reconstruct(RTK, 0.3)
 

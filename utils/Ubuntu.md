@@ -11,7 +11,8 @@
 >  https://mirrors.tuna.tsinghua.edu.cn/help/pypi/
 >
 >  ```bash
->  pip3 install pip -U
+>  sudo -H python3 -m pip install -U pip # python3 -m pip install -U pip
+>  python3 -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -U pip
 >  pip3 config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 >  ```
 
@@ -98,18 +99,16 @@
 ---
 
 > ```bash
+> git config --list
+> 
 > git add -A; git status; git commit --amend
 > git push --force-with-lease origin master
 > 
-> git fetch --all; git reset --hard origin/master # OR: git fetch origin master
+> git fetch --all # OR: git fetch origin master
+> git reset --hard origin/master
+> 
 > git reset --hard HEAD^; git pull --force
 > ```
-
----
-
-> `sudo mv * /usr/share/stardict/dic`
->
-> ![stardict](./stardict.png)
 
 ---
 
@@ -160,7 +159,8 @@
 > sudo gpasswd -a xxx sudo # OR: replace all `sudo` with `27`
 > 
 > sudo gpasswd -d xxx sudo # remove user sudo privileges
-> sudo usermod -g xxx xxx # remove all supplementary GROUPS
+> sudo usermod -G xxx xxx # remove all supplementary GROUPS
+> sudo deluser xxx sudo # remove `xxx` from sudo group
 > 
 > sudo userdel -rf xxx # remove user `xxx` and its home
 > ```
@@ -172,6 +172,16 @@
 > sudo gedit /etc/group # replace all `xxx` with `hua`
 > sudo gedit /etc/passwd # replace all `xxx` with `hua`
 > sudo gedit /etc/shadow # replace all `xxx` with `hua`
+> ```
+
+---
+
+> ```bash
+> sudo docker image ls # docker images; docker image --help
+> sudo docker image rm -f xxx # remove image_id forcely
+> sudo docker image prune -a # remove all unused images
+> sudo docker pull opendronemap/odm:2.8.3 # docker --help
+> sudo docker tag opendronemap/odm:2.8.3 opendronemap/odm:latest
 > ```
 
 ---
@@ -210,9 +220,11 @@
 >
 > ```python
 > import matplotlib, gi
-> matplotlib.use('Agg') #'TkAgg'
+> matplotlib.use('TkAgg') #'Agg'
 > gi.require_version('Gtk','2.0')
 > ```
+>
+> **Start ipython with matplotlib/pylab**: `ipython --matplotlib`, `ipython --pylab`
 
 ---
 
@@ -237,7 +249,7 @@
 ---
 
 > ```bash
-> scp -rpq xxx hua@192.168.10.107:/home/hua
+> scp -rpq aic@10.20.64.16:/home/aic/xxx ~/yyy
 > 
 > ssh hua@10.20.64.15 -X # aic@10.20.64.16
 > ssh xxx@bjfm.glodon.com -p60022 # wH8JZMX(R$MYN-Jk
@@ -262,3 +274,8 @@ $$
 \end{vmatrix}
 $$
 
+---
+
+> `sudo mv * /usr/share/stardict/dic`
+>
+> ![stardict](./stardict.png)
