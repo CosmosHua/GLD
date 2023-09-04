@@ -112,29 +112,15 @@
 
 ---
 
-**Qv2ray for Ubuntu:**
+**V2rayA for Ubuntu:** https://v2raya.org/en/docs/prologue/installation/debian/
 
-> https://qv2ray.net/en/getting-started/
->
-> https://qv2ray.net/en/getting-started/step1.html#github-releases-binary
->
-> https://qv2ray.net/en/getting-started/step2.html#configure-v2ray-core-in-qv2ray
->
-> https://qv2ray.net/en/getting-started/step3.html#subscription
->
-> https://qv2ray.net/en/plugins/usage.html#how-to-download-and-use-a-plugin
-
-> https://github.com/v2fly/v2ray-core/releases
->
-> https://github.com/Qv2ray/Qv2ray/releases/latest
->
-> https://github.com/Qv2ray/QvPlugin-Trojan/releases
-
-1. Download the [AppImage](https://github.com/Qv2ray/Qv2ray/releases/download/v2.6.3/Qv2ray.v2.6.3.linux-x64.AppImage) of Qv2ray, and `chomd +x *.AppImage`
-2. Download and unzip [v2ray-core.zip](https://github.com/v2fly/v2ray-core/releases/download/v4.33.0/v2ray-linux-64.zip), then try to `mv` it as `~/.config/qv2ray/vcore`.
-3. Run Qv2ray, and click [`Preference`->`Kernel Settings`](https://qv2ray.net/en/getting-started/step2.html#configure-v2ray-core-in-qv2ray), then set `Core Executable Path` and `V2Ray Assets Directory`.
-4. Download [Trojan plugin](https://github.com/Qv2ray/QvPlugin-Trojan/releases/download/v2.0.0/QvTrojanPlugin.v2.0.0.linux-x64.so), and click [Plugins->Click Open Local Plugin Folder](https://qv2ray.net/en/plugins/usage.html#how-to-download-and-use-a-plugin), then mv the downloaded `*.so` file to `~/.config/qv2ray/plugins`, then restart Qv2ray.
-5. Add hosts: 1. click `New`, paste hosts into `Link`; 2. [add subscription](https://qv2ray.net/en/getting-started/step3.html#subscription): subscribe to [cdp2020](https://raw.githubusercontent.com/cdp2020/v2ray/master/README.md). 
+```bash
+curl -Ls https://mirrors.v2raya.org/go.sh | sudo bash
+sudo systemctl disable v2ray --now # Xray needs to replace the service with xray
+sudo snap install v2raya # sudo dpkg -i v2raya_debian_x64_xxx.deb
+sudo systemctl start v2raya.service # start v2rayA
+sudo systemctl enable v2raya.service # set auto-start
+```
 
 > **Fail to update [cdp2020](https://raw.githubusercontent.com/cdp2020/v2ray/master/README.md)** : `sudo gedit /etc/hosts`, append a new line of `151.101.84.133 raw.githubusercontent.com`, save and close, update the subscription.
 
